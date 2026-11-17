@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  test:
+    name: forge test
+    runs-on: ubuntu-latest
+    env:
+      ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
+      FORK_TARGET_VAULT: ${{ vars.FORK_TARGET_VAULT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Format
+        run: forge fmt --check
+      - name: Build
+        run: forge build --sizes
+      - name: Test
+        run: forge test -vvv
+      - name: Fork test (Robinhood Chain 4663)
+        if: ${{ env.ROBINHOOD_RPC_URL != '' && env.FORK_TARGET_VAULT != '' }}
+        run: forge test --match-path "test/fork/*" -vvv
+
+  slither:
+    name: slither
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: crytic/slither-action@v0.4.1
+        id: slither
+        with:
+          sarif: results.sarif
+          fail-on: medium
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.slither.outputs.sarif }}
